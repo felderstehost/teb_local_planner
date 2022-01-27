@@ -351,15 +351,15 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // 加锁，在接下来的优化过程中不允许配置被修改
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
 
-  // Now perform the actual planning 现在执行真正的路径
+  // 准备工作做了这么久，现在开始真正的局部轨迹规划 ╮(╯▽╰)╭
 //   bool success = planner_->plan(robot_pose_, robot_goal_, robot_vel_, cfg_.goal_tolerance.free_goal_vel); // straight line init
   bool success = planner_->plan(transformed_plan, &robot_vel_, cfg_.goal_tolerance.free_goal_vel);
   if (!success)
   {
-    planner_->clearPlanner(); // force reinitialization for next time
+    planner_->clearPlanner(); // 强制重新初始化
     ROS_WARN("teb_local_planner was not able to obtain a local plan for the current setting.");
 
-    ++no_infeasible_plans_; // increase number of infeasible solutions in a row
+    ++no_infeasible_plans_; // 不可行方案数+1
     time_last_infeasible_plan_ = ros::Time::now();
     last_cmd_ = cmd_vel.twist;
     message = "teb_local_planner was not able to obtain a local plan";
@@ -551,7 +551,7 @@ void TebLocalPlannerROS::updateObstacleContainerWithCustomObstacles()
 
   if (!custom_obstacle_msg_.obstacles.empty())
   {
-    // We only use the global header to specify the obstacle coordinate system instead of individual ones
+    // 用global_frame_设置障碍物的坐标系，而不是随便一个坐标系
     Eigen::Affine3d obstacle_to_map_eig;
     try
     {
@@ -723,15 +723,14 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
     // 抛弃掉路径中在local_costmap外面的点
     double dist_threshold = std::max(costmap.getSizeInCellsX() * costmap.getResolution() / 2.0,
                                      costmap.getSizeInCellsY() * costmap.getResolution() / 2.0);
-    dist_threshold *= 0.85; // just consider 85% of the costmap size to better incorporate point obstacle that are
-                           // located on the border of the local costmap
+    dist_threshold *= 0.85; // dist_threshold只取代价地图尺寸的85%, 为了更好处理局部代价地图边缘上的障碍物点
 
 
     int i = 0;
     double sq_dist_threshold = dist_threshold * dist_threshold;
     double sq_dist = 1e10;
 
-    //we need to loop to a point on the plan that is within a certain distance of the robot
+    // 找到路径中距离机器人最近的点
     bool robot_reached = false;
     for(int j=0; j < (int)global_plan.size(); ++j)
     {
@@ -753,9 +752,9 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
 
     geometry_msgs::PoseStamped newer_pose;
 
-    double plan_length = 0; // check cumulative Euclidean distance along the plan
+    double plan_length = 0; // 路径累加的欧拉距离
 
-    //now we'll transform until points are outside of our distance threshold
+    // 将特定范围内的路径点进行转换
     while(i < (int)global_plan.size() && sq_dist <= sq_dist_threshold && (max_plan_length<=0 || plan_length <= max_plan_length))
     {
       const geometry_msgs::PoseStamped& pose = global_plan[i];
@@ -767,31 +766,31 @@ bool TebLocalPlannerROS::transformGlobalPlan(const tf2_ros::Buffer& tf, const st
       double y_diff = robot_pose.pose.position.y - global_plan[i].pose.position.y;
       sq_dist = x_diff * x_diff + y_diff * y_diff;
 
-      // caclulate distance to previous pose
+      // 路径点距离累加
       if (i>0 && max_plan_length>0)
         plan_length += distance_points2d(global_plan[i-1].pose.position, global_plan[i].pose.position);
 
       ++i;
     }
 
-    // if we are really close to the goal (<sq_dist_threshold) and the goal is not yet reached (e.g. orientation error >>0)
-    // the resulting transformed plan can be empty. In that case we explicitly inject the global goal.
+    // 机器人距离目标点很近时(<sq_dist_threshold) 但是还没有到比如(orientation error >>0),
+    // 这种情况下transformed_plan可能为空，因此显式地填入全局目标点
     if (transformed_plan.empty())
     {
       tf2::doTransform(global_plan.back(), newer_pose, plan_to_global_transform);
 
       transformed_plan.push_back(newer_pose);
 
-      // Return the index of the current goal point (inside the distance threshold)
+      // 返回当前目标点的索引（在限定距离范围内）
       if (current_goal_idx) *current_goal_idx = int(global_plan.size())-1;
     }
     else
     {
-      // Return the index of the current goal point (inside the distance threshold)
+      // 返回当前目标点的索引（在限定距离范围内）
       if (current_goal_idx) *current_goal_idx = i-1; // subtract 1, since i was increased once before leaving the loop
     }
 
-    // Return the transformation from the global plan to the global planning frame if desired
+    // 返回路径坐标系到全局坐标系的转换
     if (tf_plan_to_global) *tf_plan_to_global = plan_to_global_transform;
   }
   catch(tf::LookupException& ex)
