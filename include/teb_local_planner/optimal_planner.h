@@ -85,12 +85,12 @@ typedef std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> 
 /**
  * @class TebOptimalPlanner
  * @brief This class optimizes an internal Timed Elastic Band trajectory using the g2o-framework.
- * 
+ *
  * For an introduction and further details about the TEB optimization problem refer to:
  * 	- C. Rösmann et al.: Trajectory modification considering dynamic constraints of autonomous robots, ROBOTIK, 2012.
  * 	- C. Rösmann et al.: Efficient trajectory optimization using a sparse model, ECMR, 2013.
- * 	- R. Kümmerle et al.: G2o: A general framework for graph optimization, ICRA, 2011. 
- * 
+ * 	- R. Kümmerle et al.: G2o: A general framework for graph optimization, ICRA, 2011.
+ *
  * @todo: Call buildGraph() only if the teb structure has been modified to speed up hot-starting from previous solutions.
  * @todo: We introduced the non-fast mode with the support of dynamic obstacles
  *        (which leads to better results in terms of x-y-t homotopy planning).
@@ -100,12 +100,12 @@ typedef std::vector< Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> 
 class TebOptimalPlanner : public PlannerInterface
 {
 public:
-    
+
   /**
    * @brief Default constructor
    */
   TebOptimalPlanner();
-  
+
   /**
    * @brief Construct and initialize the TEB optimal planner.
    * @param cfg Const reference to the TebConfig class for internal parameters
@@ -116,12 +116,12 @@ public:
    */
   TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                     TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
-  
+
   /**
    * @brief Destruct the optimal planner.
    */
   virtual ~TebOptimalPlanner();
-  
+
   /**
     * @brief Initializes the optimal planner
     * @param cfg Const reference to the TebConfig class for internal parameters
@@ -132,18 +132,18 @@ public:
     */
   void initialize(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                   TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
-  
+
   /**
     * @param robot_model Shared pointer to the robot shape model used for optimization (optional)
     */
   void updateRobotModel(RobotFootprintModelPtr robot_model );
-  
+
   /** @name Plan a trajectory  */
   //@{
-  
+
   /**
    * @brief Plan a trajectory based on an initial reference plan.
-   * 
+   *
    * Call this method to create and optimize a trajectory that is initialized
    * according to an initial reference plan (given as a container of poses). \n
    * The method supports hot-starting from previous solutions, if avaiable: \n
@@ -159,10 +159,10 @@ public:
    * @return \c true if planning was successful, \c false otherwise
    */
   virtual bool plan(const std::vector<geometry_msgs::PoseStamped>& initial_plan, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false);
-  
+
   /**
    * @brief Plan a trajectory between a given start and goal pose (tf::Pose version)
-   * 
+   *
    * Call this method to create and optimize a trajectory that is initialized between a given start and goal pose. \n
    * The method supports hot-starting from previous solutions, if avaiable: \n
    * 	- If no trajectory exist yet, a new trajectory is initialized between start and goal poses,
@@ -177,10 +177,10 @@ public:
    * @return \c true if planning was successful, \c false otherwise
    */
   virtual bool plan(const tf::Pose& start, const tf::Pose& goal, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false);
-  
+
   /**
    * @brief Plan a trajectory between a given start and goal pose
-   * 
+   *
    * Call this method to create and optimize a trajectory that is initialized between a given start and goal pose. \n
    * The method supports hot-starting from previous solutions, if avaiable: \n
    * 	- If no trajectory exist yet, a new trajectory is initialized between start and goal poses
@@ -195,32 +195,32 @@ public:
    * @return \c true if planning was successful, \c false otherwise
    */
   virtual bool plan(const PoseSE2& start, const PoseSE2& goal, const geometry_msgs::Twist* start_vel = NULL, bool free_goal_vel=false);
-  
-  
+
+
   /**
    * @brief Get the velocity command from a previously optimized plan to control the robot at the current sampling interval.
    * @warning Call plan() first and check if the generated plan is feasible.
    * @param[out] vx translational velocity [m/s]
-   * @param[out] vy strafing velocity which can be nonzero for holonomic robots[m/s] 
+   * @param[out] vy strafing velocity which can be nonzero for holonomic robots[m/s]
    * @param[out] omega rotational velocity [rad/s]
    * @param[in] look_ahead_poses index of the final pose used to compute the velocity command.
    * @return \c true if command is valid, \c false otherwise
    */
   virtual bool getVelocityCommand(double& vx, double& vy, double& omega, int look_ahead_poses) const;
-  
-  
+
+
   /**
    * @brief Optimize a previously initialized trajectory (actual TEB optimization loop).
-   * 
+   *
    * optimizeTEB implements the main optimization loop. \n
    * It consist of two nested loops:
    * 	- The outer loop resizes the trajectory according to the temporal resolution by invoking TimedElasticBand::autoResize().
    * 	  Afterwards the internal method optimizeGraph() is called that constitutes the innerloop.
    * 	- The inner loop calls the solver (g2o framework, resp. sparse Levenberg-Marquardt) and iterates a specified
    * 	  number of optimization calls (\c iterations_innerloop).
-   * 
+   *
    * The outer loop is repeated \c iterations_outerloop times. \n
-   * The ratio of inner and outer loop iterations significantly defines the contraction behavior 
+   * The ratio of inner and outer loop iterations significantly defines the contraction behavior
    * and convergence rate of the trajectory optimization. Based on our experiences, 2-6 innerloop iterations are sufficient. \n
    * The number of outer loop iterations should be determined by considering the maximum CPU time required to match the control rate. \n
    * Optionally, the cost vector can be calculated by specifying \c compute_cost_afterwards, see computeCurrentCost().
@@ -231,20 +231,20 @@ public:
    *         the vector can be accessed afterwards using getCurrentCost().
    * @param obst_cost_scale Specify extra scaling for obstacle costs (only used if \c compute_cost_afterwards is true)
    * @param viapoint_cost_scale Specify extra scaling for via-point costs (only used if \c compute_cost_afterwards is true)
-   * @param alternative_time_cost Replace the cost for the time optimal objective by the actual (weighted) transition time 
+   * @param alternative_time_cost Replace the cost for the time optimal objective by the actual (weighted) transition time
    *          (only used if \c compute_cost_afterwards is true).
    * @return \c true if the optimization terminates successfully, \c false otherwise
-   */	  
+   */
   bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
                    double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
-  
+
   //@}
-  
-  
+
+
   /** @name Desired initial and final velocity */
   //@{
-  
-  
+
+
   /**
    * @brief Set the initial velocity at the trajectory's start pose (e.g. the robot's velocity) [twist overload].
    * @remarks Calling this function is not neccessary if the initial velocity is passed via the plan() method
@@ -252,34 +252,34 @@ public:
    *                  for holonomic robots also linear.y)
    */
   void setVelocityStart(const geometry_msgs::Twist& vel_start);
-  
+
   /**
    * @brief Set the desired final velocity at the trajectory's goal pose.
    * @remarks Call this function only if a non-zero velocity is desired and if \c free_goal_vel is set to \c false in plan()
-   * @param vel_goal twist message containing the translational and angular final velocity 
+   * @param vel_goal twist message containing the translational and angular final velocity
    */
   void setVelocityGoal(const geometry_msgs::Twist& vel_goal);
-  
+
   /**
    * @brief Set the desired final velocity at the trajectory's goal pose to be the maximum velocity limit
    * @remarks Calling this function is not neccessary if \c free_goal_vel is set to \c false in plan()
    */
   void setVelocityGoalFree() {vel_goal_.first = false;}
-  
+
   //@}
-  
-  
+
+
   /** @name Take obstacles into account */
   //@{
-  
-  
+
+
   /**
    * @brief Assign a new set of obstacles
    * @param obst_vector pointer to an obstacle container (can also be a nullptr)
    * @remarks This method overrids the obstacle container optinally assigned in the constructor.
    */
   void setObstVector(ObstContainer* obst_vector) {obstacles_ = obst_vector;}
-  
+
   /**
    * @brief Access the internal obstacle container.
    * @return Const reference to the obstacle container
@@ -287,18 +287,18 @@ public:
   const ObstContainer& getObstVector() const {return *obstacles_;}
 
   //@}
-  
+
   /** @name Take via-points into account */
   //@{
-  
-  
+
+
   /**
    * @brief Assign a new set of via-points
    * @param via_points pointer to a via_point container (can also be a nullptr)
    * @details Any previously set container will be overwritten.
    */
   void setViaPoints(const ViaPointContainer* via_points) {via_points_ = via_points;}
-  
+
   /**
    * @brief Access the internal via-point container.
    * @return Const reference to the via-point container
@@ -306,88 +306,88 @@ public:
   const ViaPointContainer& getViaPoints() const {return *via_points_;}
 
   //@}
-	  
-  
+
+
   /** @name Visualization */
   //@{
-  
+
   /**
    * @brief Register a TebVisualization class to enable visiualization routines (e.g. publish the local plan and pose sequence)
    * @param visualization shared pointer to a TebVisualization instance
    * @see visualize
    */
   void setVisualization(TebVisualizationPtr visualization);
-  
+
   /**
    * @brief Publish the local plan and pose sequence via ros topics (e.g. subscribe with rviz).
-   * 
+   *
    * Make sure to register a TebVisualization instance before using setVisualization() or an overlaoded constructor.
    * @see setVisualization
    */
   virtual void visualize();
-  
+
   //@}
-  
-  
+
+
   /** @name Utility methods and more */
   //@{
-        
+
   /**
    * @brief Reset the planner by clearing the internal graph and trajectory.
    */
-  virtual void clearPlanner() 
+  virtual void clearPlanner()
   {
     clearGraph();
     teb_.clearTimedElasticBand();
   }
-  
+
   /**
    * @brief Prefer a desired initial turning direction (by penalizing the opposing one)
-   * 
-   * A desired (initial) turning direction might be specified in case the planned trajectory oscillates between two 
+   *
+   * A desired (initial) turning direction might be specified in case the planned trajectory oscillates between two
    * solutions (in the same equivalence class!) with similar cost. Check the parameters in order to adjust the weight of the penalty.
    * Initial means that the penalty is applied only to the first few poses of the trajectory.
    * @param dir This parameter might be RotType::left (prefer left), RotType::right (prefer right) or RotType::none (prefer none)
    */
   virtual void setPreferredTurningDir(RotType dir) {prefer_rotdir_=dir;}
-  
+
   /**
    * @brief Register the vertices and edges defined for the TEB to the g2o::Factory.
-   * 
+   *
    * This allows the user to export the internal graph to a text file for instance.
    * Access the optimizer() for more details.
    */
   static void registerG2OTypes();
-  
+
   /**
    * @brief Access the internal TimedElasticBand trajectory.
    * @warning In general, the underlying teb must not be modified directly. Use with care...
    * @return reference to the teb
    */
   TimedElasticBand& teb() {return teb_;};
-  
+
   /**
    * @brief Access the internal TimedElasticBand trajectory (read-only).
    * @return const reference to the teb
    */
   const TimedElasticBand& teb() const {return teb_;};
-  
+
   /**
    * @brief Access the internal g2o optimizer.
    * @warning In general, the underlying optimizer must not be modified directly. Use with care...
    * @return const shared pointer to the g2o sparse optimizer
    */
   boost::shared_ptr<g2o::SparseOptimizer> optimizer() {return optimizer_;};
-  
+
   /**
    * @brief Access the internal g2o optimizer (read-only).
    * @return const shared pointer to the g2o sparse optimizer
    */
   boost::shared_ptr<const g2o::SparseOptimizer> optimizer() const {return optimizer_;};
-  
+
   /**
    * @brief Check if last optimization was successful
-   * @return \c true if the last optimization returned without errors, 
+   * @return \c true if the last optimization returned without errors,
    *         otherwise \c false (also if no optimization has been called before).
    */
   bool isOptimized() const {return optimized_;};
@@ -396,19 +396,19 @@ public:
    * @brief Returns true if the planner has diverged.
    */
   bool hasDiverged() const override;
-	
+
   /**
    * @brief Compute the cost vector of a given optimization problen (hyper-graph must exist).
-   * 
+   *
    * Use this method to obtain information about the current edge errors / costs (local cost functions). \n
    * The vector of cost values is composed according to the different edge types (time_optimal, obstacles, ...). \n
    * Refer to the method declaration for the detailed composition. \n
    * The cost for the edges that minimize time differences (EdgeTimeOptimal) corresponds to the sum of all single
    * squared time differneces: \f$ \sum_i \Delta T_i^2 \f$. Sometimes, the user may want to get a value that is proportional
    * or identical to the actual trajectory transition time \f$ \sum_i \Delta T_i \f$. \n
-   * Set \c alternative_time_cost to true in order to get the cost calculated using the latter equation, but check the 
+   * Set \c alternative_time_cost to true in order to get the cost calculated using the latter equation, but check the
    * implemented definition, if the value is scaled to match the magnitude of other cost values.
-   * 
+   *
    * @todo Remove the scaling term for the alternative time cost.
    * @todo Can we use the last error (chi2) calculated from g2o instead of calculating it by ourself?
    * @see getCurrentCost
@@ -419,7 +419,7 @@ public:
    * @return TebCostVec containing the cost values
    */
   void computeCurrentCost(double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
-  
+
   /**
    * Compute and return the cost of the current optimization graph (supports multiple trajectories)
    * @param[out] cost current cost value for each trajectory
@@ -433,20 +433,20 @@ public:
     computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
     cost.push_back( getCurrentCost() );
   }
-  
+
   /**
    * @brief Access the cost vector.
    *
-   * The accumulated cost value previously calculated using computeCurrentCost 
+   * The accumulated cost value previously calculated using computeCurrentCost
    * or by calling optimizeTEB with enabled cost flag.
    * @return const reference to the TebCostVec.
    */
   double getCurrentCost() const {return cost_;}
-  
-    
+
+
   /**
    * @brief Extract the velocity from consecutive poses and a time difference (including strafing velocity for holonomic robots)
-   * 
+   *
    * The velocity is extracted using finite differences.
    * The direction of the translational velocity is also determined.
    * @param pose1 pose at time k
@@ -457,19 +457,19 @@ public:
    * @param[out] omega rotational velocity
    */
   inline void extractVelocity(const PoseSE2& pose1, const PoseSE2& pose2, double dt, double& vx, double& vy, double& omega) const;
-  
+
   /**
    * @brief Compute the velocity profile of the trajectory
-   * 
+   *
    * This method computes the translational and rotational velocity for the complete
-   * planned trajectory. 
+   * planned trajectory.
    * The first velocity is the one that is provided as initial velocity (fixed).
-   * Velocities at index k=2...end-1 are related to the transition from pose_{k-1} to pose_k. 
+   * Velocities at index k=2...end-1 are related to the transition from pose_{k-1} to pose_k.
    * The last velocity is the final velocity (fixed).
    * The number of Twist objects is therefore sizePoses()+1;
    * In summary:
    *     v[0] = v_start,
-   *     v[1,...end-1] = +-(pose_{k+1}-pose{k})/dt, 
+   *     v[1,...end-1] = +-(pose_{k+1}-pose{k})/dt,
    *     v(end) = v_goal
    * It can be used for evaluation and debugging purposes or
    * for open-loop control. For computing the velocity required for controlling the robot
@@ -477,10 +477,10 @@ public:
    * @param[out] velocity_profile velocity profile will be written to this vector (after clearing any existing content) with the size=no_poses+1
    */
   void getVelocityProfile(std::vector<geometry_msgs::Twist>& velocity_profile) const;
-  
+
     /**
    * @brief Return the complete trajectory including poses, velocity profiles and temporal information
-   * 
+   *
    * It is useful for evaluation and debugging purposes or for open-loop control.
    * Since the velocity obtained using difference quotients is the mean velocity between consecutive poses,
    * the velocity at each pose at time stamp k is obtained by taking the average between both velocities.
@@ -490,10 +490,10 @@ public:
    * @param[out] trajectory the resulting trajectory
    */
   void getFullTrajectory(std::vector<TrajectoryPointMsg>& trajectory) const;
-  
+
   /**
    * @brief Check whether the planned trajectory is feasible or not.
-   * 
+   *
    * This method currently checks only that the trajectory, or a part of the trajectory is collision free.
    * Obstacles are here represented as costmap instead of the internal ObstacleContainer.
    * @param costmap_model Pointer to the costmap model
@@ -501,22 +501,22 @@ public:
    * @param inscribed_radius The radius of the inscribed circle of the robot
    * @param circumscribed_radius The radius of the circumscribed circle of the robot
    * @param look_ahead_idx Number of poses along the trajectory that should be verified, if -1, the complete trajectory will be checked.
-   * @return \c true, if the robot footprint along the first part of the trajectory intersects with 
+   * @return \c true, if the robot footprint along the first part of the trajectory intersects with
    *         any obstacle in the costmap, \c false otherwise.
    */
   virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius = 0.0,
           double circumscribed_radius=0.0, int look_ahead_idx=-1);
-  
+
   //@}
-  
+
 protected:
-  
+
   /** @name Hyper-Graph creation and optimization */
   //@{
-  
+
   /**
    * @brief Build the hyper-graph representing the TEB optimization problem.
-   * 
+   *
    * This method creates the optimization problem according to the hyper-graph formulation. \n
    * For more details refer to the literature cited in the TebOptimalPlanner class description.
    * @see optimizeGraph
@@ -527,10 +527,10 @@ protected:
    * @return \c true, if the graph was created successfully, \c false otherwise.
    */
   bool buildGraph(double weight_multiplier=1.0);
-  
+
   /**
    * @brief Optimize the previously constructed hyper-graph to deform / optimize the TEB.
-   * 
+   *
    * This method invokes the g2o framework to solve the optimization problem considering dedicated sparsity patterns. \n
    * The current implementation calls a non-constrained sparse Levenberg-Marquardt algorithm. Constraints are considered
    * by utilizing penalty approximations. Refer to the literature cited in the TebOptimalPlanner class description.
@@ -541,17 +541,17 @@ protected:
    * @return \c true, if optimization terminates successfully, \c false otherwise.
    */
   bool optimizeGraph(int no_iterations, bool clear_after=true);
-  
+
   /**
    * @brief Clear an existing internal hyper-graph.
    * @see buildGraph
    * @see optimizeGraph
    */
   void clearGraph();
-  
+
   /**
    * @brief Add all relevant vertices to the hyper-graph as optimizable variables.
-   * 
+   *
    * Vertices (if unfixed) represent the variables that will be optimized. \n
    * In case of the Timed-Elastic-Band poses and time differences form the vertices of the hyper-graph. \n
    * The order of insertion of vertices (to the graph) is important for efficiency,
@@ -562,7 +562,7 @@ protected:
    * @see optimizeGraph
    */
   void AddTEBVertices();
-  
+
   /**
    * @brief Add all edges (local cost functions) for limiting the translational and angular velocity.
    * @see EdgeVelocity
@@ -570,7 +570,7 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesVelocity();
-  
+
   /**
    * @brief Add all edges (local cost functions) for limiting the translational and angular acceleration.
    * @see EdgeAcceleration
@@ -580,7 +580,7 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesAcceleration();
-  
+
   /**
    * @brief Add all edges (local cost functions) for minimizing the transition time (resp. minimize time differences)
    * @see EdgeTimeOptimal
@@ -596,7 +596,7 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesShortestPath();
-  
+
   /**
    * @brief Add all edges (local cost functions) related to keeping a distance from static obstacles
    * @warning do not combine with AddEdgesInflatedObstacles
@@ -606,7 +606,7 @@ protected:
    * @param weight_multiplier Specify an additional weight multipler (in addition to the the config weight)
    */
   void AddEdgesObstacles(double weight_multiplier=1.0);
-  
+
   /**
    * @brief Add all edges (local cost functions) related to keeping a distance from static obstacles (legacy association strategy)
    * @see EdgeObstacle
@@ -615,7 +615,7 @@ protected:
    * @param weight_multiplier Specify an additional weight multipler (in addition to the the config weight)
    */
   void AddEdgesObstaclesLegacy(double weight_multiplier=1.0);
-  
+
   /**
    * @brief Add all edges (local cost functions) related to minimizing the distance to via-points
    * @see EdgeViaPoint
@@ -623,10 +623,10 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesViaPoints();
-  
+
   /**
    * @brief Add all edges (local cost functions) related to keeping a distance from dynamic (moving) obstacles.
-   * @warning experimental 
+   * @warning experimental
    * @todo Should we also add neighbors to decrease jiggling/oscillations
    * @see EdgeDynamicObstacle
    * @see buildGraph
@@ -644,7 +644,7 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesKinematicsDiffDrive();
-  
+
   /**
    * @brief Add all edges (local cost functions) for satisfying kinematic constraints of a carlike robot
    * @warning do not combine with AddEdgesKinematicsDiffDrive()
@@ -653,13 +653,13 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesKinematicsCarlike();
-  
+
   /**
    * @brief Add all edges (local cost functions) for prefering a specifiy turning direction (by penalizing the other one)
    * @see buildGraph
    * @see optimizeGraph
    */
-  void AddEdgesPreferRotDir(); 
+  void AddEdgesPreferRotDir();
 
   /**
    * @brief Add all edges (local cost function) for reducing the velocity of a vertex due to its associated obstacles
@@ -667,39 +667,39 @@ protected:
    * @see optimizeGraph
    */
   void AddEdgesVelocityObstacleRatio();
-  
+
   //@}
-  
-  
+
+
   /**
    * @brief Initialize and configure the g2o sparse optimizer.
    * @return shared pointer to the g2o::SparseOptimizer instance
    */
   boost::shared_ptr<g2o::SparseOptimizer> initOptimizer();
-    
+
 
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
-  
+
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)
-  
+
   // internal objects (memory management owned)
   TebVisualizationPtr visualization_; //!< Instance of the visualization class
-  TimedElasticBand teb_; //!< Actual trajectory object
-  RobotFootprintModelPtr robot_model_; //!< Robot model
-  boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
-  std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
-  std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
+  TimedElasticBand teb_; //!< 真正的轨迹对象
+  RobotFootprintModelPtr robot_model_; //!< 机器人模型
+  boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< 用于轨迹优化的g2o优化器
+  std::pair<bool, geometry_msgs::Twist> vel_start_; //!< 存储初始位姿时带的速度
+  std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< 存储目标位姿时带的速度
 
   bool initialized_; //!< Keeps track about the correct initialization of this class
   bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
-  
+
 public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW    
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 //! Abbrev. for shared instances of the TebOptimalPlanner
