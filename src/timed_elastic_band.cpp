@@ -322,61 +322,65 @@ double TimedElasticBand::getAccumulatedDistance() const
   return dist;
 }
 
+// 在起点和终点之间初始化出一条轨迹
+// 用给定的采样距离对连接起点和终点的直线进行插值，采样距离可以是diststep（欧式空间）
+// 位姿之间的时间差初始化为timestep.
+// 如果diststep是零，产生的轨迹只包含起始点和终点。
 bool TimedElasticBand::initTrajectoryToGoal(const PoseSE2& start, const PoseSE2& goal, double diststep, double max_vel_x, int min_samples, bool guess_backwards_motion)
 {
   if (!isInit())
   {
     addPose(start); // 添加初始点
-    setPoseVertexFixed(0,true); // StartConf is a fixed constraint during optimization
+    setPoseVertexFixed(0,true); // 优化过程中起始点是固定的约束
 
     double timestep = 0.1;
 
-    if (diststep!=0)
+    if (diststep!=0) // 起点和终点之间进行插值
     {
       Eigen::Vector2d point_to_goal = goal.position()-start.position();
-      double dir_to_goal = std::atan2(point_to_goal[1],point_to_goal[0]); // direction to goal
+      double dir_to_goal = std::atan2(point_to_goal[1],point_to_goal[0]); // 目标点方向
       double dx = diststep*std::cos(dir_to_goal);
       double dy = diststep*std::sin(dir_to_goal);
       double orient_init = dir_to_goal;
-      // check if the goal is behind the start pose (w.r.t. start orientation)
+      // 检查目标点是否在起始位姿的后方 (基于起始点的朝向)
       if (guess_backwards_motion && point_to_goal.dot(start.orientationUnitVec()) < 0)
         orient_init = g2o::normalize_theta(orient_init+M_PI);
-      // TODO: timestep ~ max_vel_x_backwards for backwards motions
 
       double dist_to_goal = point_to_goal.norm();
-      double no_steps_d = dist_to_goal/std::abs(diststep); // ignore negative values
-      unsigned int no_steps = (unsigned int) std::floor(no_steps_d);
+      double no_steps_d = dist_to_goal/std::abs(diststep); // 忽略正负号
+      unsigned int no_steps = (unsigned int) std::floor(no_steps_d); // 取整
 
       if (max_vel_x > 0) timestep = diststep / max_vel_x;
 
-      for (unsigned int i=1; i<=no_steps; i++) // start with 1! starting point had index 0
+      for (unsigned int i=1; i<=no_steps; i++) // 从i=1开始
       {
         if (i==no_steps && no_steps_d==(float) no_steps)
-            break; // if last conf (depending on stepsize) is equal to goal conf -> leave loop
+            break; // 如果最后一个插值和目标点一样则退出循环
         addPoseAndTimeDiff(start.x()+i*dx,start.y()+i*dy,orient_init,timestep);
       }
 
     }
 
-    // if number of samples is not larger than min_samples, insert manually
+    // 如果样本数比min_samples-1少，手动插值
     if ( sizePoses() < min_samples-1 )
     {
       ROS_DEBUG("initTEBtoGoal(): number of generated samples is less than specified by min_samples. Forcing the insertion of more samples...");
-      while (sizePoses() < min_samples-1) // subtract goal point that will be added later
+      while (sizePoses() < min_samples-1) // 没有考虑目标点，之后会添加进来
       {
         // simple strategy: interpolate between the current pose and the goal
+        // ？？？
         PoseSE2 intermediate_pose = PoseSE2::average(BackPose(), goal);
         if (max_vel_x > 0) timestep = (intermediate_pose.position()-BackPose().position()).norm()/max_vel_x;
         addPoseAndTimeDiff( intermediate_pose, timestep ); // let the optimier correct the timestep (TODO: better initialization
       }
     }
 
-    // add goal
+    // 添加目标点
     if (max_vel_x > 0) timestep = (goal.position()-BackPose().position()).norm()/max_vel_x;
-    addPoseAndTimeDiff(goal,timestep); // add goal point
-    setPoseVertexFixed(sizePoses()-1,true); // GoalConf is a fixed constraint during optimization
+    addPoseAndTimeDiff(goal,timestep);
+    setPoseVertexFixed(sizePoses()-1,true); // 优化过程中目标点的约束是固定的
   }
-  else // size!=0
+  else // 位姿数不为零，已经初始化过了
   {
     ROS_WARN("Cannot init TEB between given configuration and goal, because TEB vectors are not empty or TEB is already initialized (call this function before adding states yourself)!");
     ROS_WARN("Number of TEB configurations: %d, Number of TEB timediffs: %d",(unsigned int) sizePoses(),(unsigned int) sizeTimeDiffs());
@@ -394,20 +398,19 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
     PoseSE2 start(plan.front().pose);
     PoseSE2 goal(plan.back().pose);
 
-    addPose(start); // add starting point with given orientation
-    setPoseVertexFixed(0,true); // StartConf is a fixed constraint during optimization
+    addPose(start); // 添加起始点
+    setPoseVertexFixed(0,true); // 优化过程中起始点是固定的约束
 
     bool backwards = false;
-    if (guess_backwards_motion && (goal.position()-start.position()).dot(start.orientationUnitVec()) < 0) // check if the goal is behind the start pose (w.r.t. start orientation)
+    if (guess_backwards_motion && (goal.position()-start.position()).dot(start.orientationUnitVec()) < 0) // 目标点是否在后面
         backwards = true;
-    // TODO: dt ~ max_vel_x_backwards for backwards motions
 
     for (int i=1; i<(int)plan.size()-1; ++i)
     {
         double yaw;
         if (estimate_orient)
         {
-            // get yaw from the orientation of the distance vector between pose_{i+1} and pose_{i}
+            // 从pose(i)到pose(i+1)的向量得到yaw朝向
             double dx = plan[i+1].pose.position.x - plan[i].pose.position.x;
             double dy = plan[i+1].pose.position.y - plan[i].pose.position.y;
             yaw = std::atan2(dy,dx);
@@ -423,11 +426,11 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
         addPoseAndTimeDiff(intermediate_pose, dt);
     }
 
-    // if number of samples is not larger than min_samples, insert manually
+    // 如果样本数比min_samples-1少，手动插值
     if ( sizePoses() < min_samples-1 )
     {
       ROS_DEBUG("initTEBtoGoal(): number of generated samples is less than specified by min_samples. Forcing the insertion of more samples...");
-      while (sizePoses() < min_samples-1) // subtract goal point that will be added later
+      while (sizePoses() < min_samples-1) // 没有考虑目标点，之后会添加进来
       {
         // simple strategy: interpolate between the current pose and the goal
         PoseSE2 intermediate_pose = PoseSE2::average(BackPose(), goal);
@@ -436,12 +439,12 @@ bool TimedElasticBand::initTrajectoryToGoal(const std::vector<geometry_msgs::Pos
       }
     }
 
-    // Now add final state with given orientation
+    // 添加最后一个点
     double dt = estimateDeltaT(BackPose(), goal, max_vel_x, max_vel_theta);
     addPoseAndTimeDiff(goal, dt);
-    setPoseVertexFixed(sizePoses()-1,true); // GoalConf is a fixed constraint during optimization
+    setPoseVertexFixed(sizePoses()-1,true); // 优化过程中目标点的约束是固定的
   }
-  else // size!=0
+  else // 位姿数不为零，已经初始化过了
   {
     ROS_WARN("Cannot init TEB between given configuration and goal, because TEB vectors are not empty or TEB is already initialized (call this function before adding states yourself)!");
     ROS_WARN("Number of TEB configurations: %d, Number of TEB timediffs: %d", sizePoses(), sizeTimeDiffs());
@@ -551,7 +554,32 @@ int TimedElasticBand::findClosestTrajectoryPose(const Obstacle& obstacle, double
   return findClosestTrajectoryPose(obstacle.getCentroid(), distance);
 }
 
-
+/**
+ * @brief  根据参考分辨率，通过添加或减少(pose,dt)改变轨迹尺寸.
+ *
+ * 改变轨迹尺寸以下场景有帮助:
+ *
+ * 	- 障碍物会让teb伸长，为了满足路径分辨率的要求和避免的太大或者太小步长导致的不当行为
+ * 	  After clearance of obstacles, the teb should (re-) contract to its (time-)optimal version.
+ *    - If the distance to the goal state is getting smaller,
+ *      dt is decreasing as well. This leads to a heavily
+ *      fine-grained discretization in combination with many
+ *      discrete poses. Thus, the computation time will
+ *      be/remain high and in addition numerical instabilities
+ *      can appear (e.g. due to the division by a small \f$ \Delta T_i \f$).
+ *
+ * The implemented strategy checks all timediffs \f$ \Delta T_i \f$ and
+ *
+ * 	- inserts a new sample if \f$ \Delta T_i > \Delta T_{ref} + \Delta T_{hyst} \f$
+ *    - removes a sample if \f$ \Delta T_i < \Delta T_{ref} - \Delta T_{hyst} \f$
+ *
+ * Each call only one new sample (pose-dt-pair) is inserted or removed.
+ * @param dt_ref 参考分辨率
+ * @param dt_hysteresis 避免震荡的迟滞缓冲
+ * @param min_samples 轨迹改变尺寸后的最少样本数
+ * @param max_samples 轨迹改变尺寸后的最大样本数
+ * @param fast_mode 如果 true, 轨迹只迭代依次增加或者减少样本，false的话，不停的迭代直到没有位姿增加或者减少
+ */
 void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_start, boost::optional<const PoseSE2&> new_goal, int min_samples)
 {
   // first and simple approach: change only start confs (and virtual start conf for inital velocity)
@@ -559,11 +587,10 @@ void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_sta
 
   if (new_start && sizePoses()>0)
   {
-    // find nearest state (using l2-norm) in order to prune the trajectory
-    // (remove already passed states)
+    // 找到最近的位姿（用l2-norm）,为了裁剪轨迹（去掉已经走过的点）
     double dist_cache = (new_start->position()- Pose(0).position()).norm();
     double dist;
-    int lookahead = std::min<int>( sizePoses()-min_samples, 10); // satisfy min_samples, otherwise max 10 samples
+    int lookahead = std::min<int>( sizePoses()-min_samples, 10); // lookahead不能超过10
 
     int nearest_idx = 0;
     for (int i = 1; i<=lookahead; ++i)
@@ -577,7 +604,7 @@ void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_sta
       else break;
     }
 
-    // prune trajectory at the beginning (and extrapolate sequences at the end if the horizon is fixed)
+    // 在开始出裁剪轨迹，如果要求horizon不变，就在尾部补充
     if (nearest_idx>0)
     {
       // nearest_idx is equal to the number of samples to be removed (since it counts from 0 ;-) )
@@ -586,7 +613,7 @@ void TimedElasticBand::updateAndPruneTEB(boost::optional<const PoseSE2&> new_sta
       deleteTimeDiffs(1, nearest_idx); // delete corresponding time differences
     }
 
-    // update start
+    // 更新起始点
     Pose(0) = *new_start;
   }
 

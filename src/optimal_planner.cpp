@@ -184,7 +184,9 @@ boost::shared_ptr<g2o::SparseOptimizer> TebOptimalPlanner::initOptimizer()
   return optimizer;
 }
 
-
+// 将轨迹优化问题构建成了一个g2o图优化问题并通过g2o中关于大规模稀疏矩阵的优化算法解决，
+// 用到的超图构建(hyper-graph)，也就是将机器人位姿和时间差描述为顶点(vertex)（优化的对象），
+// 目标函数以及约束函数被看做边(edges)，超图中每个约束都为一条edge，并且每条edge允许连接的vertex数目是不受限。
 bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards,
                                     double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost)
 {
@@ -210,13 +212,14 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
       teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples, cfg_->trajectory.max_samples, fast_mode);
 
     }
-
+    // step xx  构建超图
     success = buildGraph(weight_multiplier);
     if (!success)
     {
         clearGraph();
         return false;
     }
+    // step xx  开始图优化
     success = optimizeGraph(iterations_innerloop, false);
     if (!success)
     {
@@ -224,7 +227,7 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
         return false;
     }
     optimized_ = true;
-
+    // step xx   compute_cost_afterwards 默认是false
     if (compute_cost_afterwards && i==iterations_outerloop-1) // compute cost vec only in the last iteration
       computeCurrentCost(obst_cost_scale, viapoint_cost_scale, alternative_time_cost);
 
@@ -333,10 +336,10 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
     ROS_WARN("Cannot build graph, because it is not empty. Call graphClear()!");
     return false;
   }
-
+  // 调用g20优化器的setComputeBatchStatistics函数，参数如果为true,为数据分配缓冲区
   optimizer_->setComputeBatchStatistics(cfg_->recovery.divergence_detection_enable);
 
-  // 加入TEB顶点
+  // 加入TEB顶点（位姿和时间差顶点）
   AddTEBVertices();
 
   // 加入边（局部代价函数）
@@ -345,25 +348,25 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   else
     AddEdgesObstacles(weight_multiplier);
 
-  if (cfg_->obstacles.include_dynamic_obstacles)
+  if (cfg_->obstacles.include_dynamic_obstacles)  // 添加动态障碍物约束
     AddEdgesDynamicObstacles();
 
-  AddEdgesViaPoints();
+  AddEdgesViaPoints();  // 通过点约束
 
-  AddEdgesVelocity();
+  AddEdgesVelocity();  // 速度约束
 
-  AddEdgesAcceleration();
+  AddEdgesAcceleration();  // 加速度约束
 
-  AddEdgesTimeOptimal();
+  AddEdgesTimeOptimal();  // 时间约束
 
-  AddEdgesShortestPath();
+  AddEdgesShortestPath();  // 最短路径约束
 
   if (cfg_->robot.min_turning_radius == 0 || cfg_->optim.weight_kinematics_turning_radius == 0)
-    AddEdgesKinematicsDiffDrive(); // 差速机器人
+    AddEdgesKinematicsDiffDrive(); // 差速机器人运动学约束
   else
-    AddEdgesKinematicsCarlike(); // 类汽车机器人，该类型受旋转半径的约束
+    AddEdgesKinematicsCarlike(); // 类汽车机器人运动学约束，该类型受旋转半径的约束
 
-  AddEdgesPreferRotDir();
+  AddEdgesPreferRotDir();  // 朝向约束
 
   if (cfg_->optim.weight_velocity_obstacle_ratio > 0)
     AddEdgesVelocityObstacleRatio();
@@ -387,7 +390,7 @@ bool TebOptimalPlanner::optimizeGraph(int no_iterations,bool clear_after)
     return false;
   }
 
-  optimizer_->setVerbose(cfg_->optim.optimization_verbose);
+  optimizer_->setVerbose(cfg_->optim.optimization_verbose);  // 打印信息
   optimizer_->initializeOptimization();
 
   int iter = optimizer_->optimize(no_iterations);
@@ -412,13 +415,12 @@ void TebOptimalPlanner::clearGraph()
   // 清除优化器的状态
   if (optimizer_)
   {
-    // we will delete all edges but keep the vertices. 清除所有的边，保留顶点
-    // before doing so, we will delete the link from the vertices to the edges.
+    // 清除所有的边，再清除所以顶点
     auto& vertices = optimizer_->vertices();
     for(auto& v : vertices)
       v.second->edges().clear();
 
-    optimizer_->vertices().clear();  // necessary, because optimizer->clear deletes pointer-targets (therefore it deletes TEB states!)
+    optimizer_->vertices().clear();  // 这样清理是有必要的，如果直接用optimizer->clear会删除指针对象（TEB的状态也也就没有了）
     optimizer_->clear();
   }
 }
@@ -427,19 +429,19 @@ void TebOptimalPlanner::clearGraph()
 
 void TebOptimalPlanner::AddTEBVertices()
 {
-  // 加顶点到图中
+  // 添加顶点到图中
   ROS_DEBUG_COND(cfg_->optim.optimization_verbose, "Adding TEB vertices ...");
   unsigned int id_counter = 0; // 用于顶点的索引
   obstacles_per_vertex_.resize(teb_.sizePoses());
   auto iter_obstacle = obstacles_per_vertex_.begin();
   for (int i=0; i<teb_.sizePoses(); ++i)
   {
-    teb_.PoseVertex(i)->setId(id_counter++);
-    optimizer_->addVertex(teb_.PoseVertex(i));
+    teb_.PoseVertex(i)->setId(id_counter++); // 先记录PoseVertex的id
+    optimizer_->addVertex(teb_.PoseVertex(i));  // 再添加位姿顶点
     if (teb_.sizeTimeDiffs()!=0 && i<teb_.sizeTimeDiffs())
     {
       teb_.TimeDiffVertex(i)->setId(id_counter++);
-      optimizer_->addVertex(teb_.TimeDiffVertex(i));
+      optimizer_->addVertex(teb_.TimeDiffVertex(i));  // 添加时间差顶点
     }
     iter_obstacle->clear();
     (iter_obstacle++)->reserve(obstacles_->size());
@@ -450,7 +452,7 @@ void TebOptimalPlanner::AddTEBVertices()
 void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
 {
   if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==nullptr )
-    return; // 如果权重等于零则不加入边约束
+    return; // 如果权重等于零则不添加该约束
 
 
   bool inflated = cfg_->obstacles.inflation_dist > cfg_->obstacles.min_obstacle_dist;
@@ -465,6 +467,7 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
 
   auto iter_obstacle = obstacles_per_vertex_.begin();
 
+  // lambda表达式， 捕获inflated, &information, &information_inflated, this。函数参数为index和obstacle
   auto create_edge = [inflated, &information, &information_inflated, this] (int index, const Obstacle* obstacle) {
     if (inflated)
     {
@@ -546,9 +549,9 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
         continue;
       }
 
-      // 创建障碍物边
+      // 创建障碍物约束
       for (const ObstaclePtr obst : *iter_obstacle)
-        create_edge(i, obst.get());
+        create_edge(i, obst.get()); // 上面的lambda表达式
       ++iter_obstacle;
   }
 }
@@ -664,7 +667,7 @@ void TebOptimalPlanner::AddEdgesDynamicObstacles(double weight_multiplier)
     if (!(*obst)->isDynamic())
       continue;
 
-    // Skip first and last pose, as they are fixed
+    // 跳过第一个和最后一个位姿，因为他们是固定的
     double time = teb_.TimeDiff(0);
     for (int i=1; i < teb_.sizePoses() - 1; ++i)
     {
@@ -1064,15 +1067,14 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
 
   cost_ = 0;
 
-  if (alternative_time_cost)
+  if (alternative_time_cost) // true 代表cost累加方式为  \f$ \sum_i \Delta T_i \f$
   {
     cost_ += teb_.getSumOfAllTimeDiffs();
     // TEST we use SumOfAllTimeDiffs() here, because edge cost depends on number of samples, which is not always the same for similar TEBs,
     // since we are using an AutoResize Function with hysteresis.
   }
 
-  // now we need pointers to all edges -> calculate error for each edge-type
-  // since we aren't storing edge pointers, we need to check every edge
+  // 现在开始累加所有的代价。因为没有存储边的指针，所有要检查每个边是不是nullptr
   for (std::vector<g2o::OptimizableGraph::Edge*>::const_iterator it = optimizer_->activeEdges().begin(); it!= optimizer_->activeEdges().end(); it++)
   {
     double cur_cost = (*it)->chi2();
@@ -1089,12 +1091,12 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale, double viapoi
     }
     else if (dynamic_cast<EdgeTimeOptimal*>(*it) != nullptr && alternative_time_cost)
     {
-      continue; // skip these edges if alternative_time_cost is active
+      continue; // 如果alternative_time_cost是true, 该循环的代价被忽略
     }
     cost_ += cur_cost;
   }
 
-  // delete temporary created graph
+  // 删除临时创建的图
   if (!graph_exist_flag)
     clearGraph();
 }
@@ -1115,7 +1117,7 @@ void TebOptimalPlanner::extractVelocity(const PoseSE2& pose1, const PoseSE2& pos
   if (cfg_->robot.max_vel_y == 0) // nonholonomic robot
   {
     Eigen::Vector2d conf1dir( cos(pose1.theta()), sin(pose1.theta()) );
-    // translational velocity
+    // 线速度
     double dir = deltaS.dot(conf1dir);
     vx = (double) g2o::sign(dir) * deltaS.norm()/dt;
     vy = 0;
@@ -1178,7 +1180,7 @@ void TebOptimalPlanner::getVelocityProfile(std::vector<geometry_msgs::Twist>& ve
   int n = teb_.sizePoses();
   velocity_profile.resize( n+1 );
 
-  // start velocity
+  // 起始点的速度
   velocity_profile.front().linear.z = 0;
   velocity_profile.front().angular.x = velocity_profile.front().angular.y = 0;
   velocity_profile.front().linear.x = vel_start_.second.linear.x;
@@ -1192,7 +1194,7 @@ void TebOptimalPlanner::getVelocityProfile(std::vector<geometry_msgs::Twist>& ve
     extractVelocity(teb_.Pose(i-1), teb_.Pose(i), teb_.TimeDiff(i-1), velocity_profile[i].linear.x, velocity_profile[i].linear.y, velocity_profile[i].angular.z);
   }
 
-  // goal velocity
+  // 目标点的速度
   velocity_profile.back().linear.z = 0;
   velocity_profile.back().angular.x = velocity_profile.back().angular.y = 0;
   velocity_profile.back().linear.x = vel_goal_.second.linear.x;
@@ -1211,7 +1213,7 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 
   double curr_time = 0;
 
-  // start
+  // 起始点
   TrajectoryPointMsg& start = trajectory.front();
   teb_.Pose(0).toPoseMsg(start.pose);
   start.velocity.linear.z = 0;
@@ -1223,7 +1225,7 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
 
   curr_time += teb_.TimeDiff(0);
 
-  // intermediate points
+  // 中间点
   for (int i=1; i < n-1; ++i)
   {
     TrajectoryPointMsg& point = trajectory[i];
@@ -1241,7 +1243,7 @@ void TebOptimalPlanner::getFullTrajectory(std::vector<TrajectoryPointMsg>& traje
     curr_time += teb_.TimeDiff(i);
   }
 
-  // goal
+  // 目标点
   TrajectoryPointMsg& goal = trajectory.back();
   teb_.BackPose().toPoseMsg(goal.pose);
   goal.velocity.linear.z = 0;
