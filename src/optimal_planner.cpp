@@ -172,10 +172,13 @@ boost::shared_ptr<g2o::SparseOptimizer> TebOptimalPlanner::initOptimizer()
 
   // 分配优化器
   boost::shared_ptr<g2o::SparseOptimizer> optimizer = boost::make_shared<g2o::SparseOptimizer>();
-  std::unique_ptr<TEBLinearSolver> linear_solver(new TEBLinearSolver()); // optimization.h中有定义
+  // std::unique_ptr<TEBLinearSolver> linear_solver(new TEBLinearSolver()); // optimization.h中有定义
+  TEBLinearSolver* linear_solver = new TEBLinearSolver();
   linear_solver->setBlockOrdering(true);
-  std::unique_ptr<TEBBlockSolver> block_solver(new TEBBlockSolver(std::move(linear_solver)));
-  g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(std::move(block_solver));
+  // std::unique_ptr<TEBBlockSolver> block_solver(new TEBBlockSolver(std::move(linear_solver)));
+  // TEBBlockSolver* block_solver = new TEBBlockSolver(linear_solver);
+  TEBBlockSolver* block_solver = new TEBBlockSolver(std::unique_ptr<TEBLinearSolver>(linear_solver));
+  g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(std::unique_ptr<TEBBlockSolver>(block_solver));
 
   optimizer->setAlgorithm(solver);
 
